@@ -1,0 +1,6 @@
+[submodule "scons-local"]
+	path = scons-local
+	url = git://github.com/dustyleary/scons-local.git
+[submodule "gtk+"]
+	path = gtk+
+	url = git://git.gnome.org/gtk+
