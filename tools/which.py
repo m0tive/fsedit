@@ -1,5 +1,7 @@
 #! /usr/bin/env python
 
+# Originally based upon Python26\Tools\Scripts\which.py
+
 # Variant of "which".
 # On stderr, near and total misses are reported.
 # '-l<flags>' argument adds ls -l<flags> of each file found.
@@ -16,21 +18,29 @@ def msg(str):
 def main():
     pathlist = os.environ['PATH'].split(os.pathsep)
 
-    sts = 0
-    longlist = ''
+    ext = [""]
+    if os.name == "nt":
+        ext = ["", ".exe", ".bat", ".cmd"]
 
-    if sys.argv[1:] and sys.argv[1][:2] == '-l':
-        longlist = sys.argv[1]
-        del sys.argv[1]
+    sts = 0
 
     for prog in sys.argv[1:]:
         ident = ()
         for dir in pathlist:
-            filename = os.path.join(dir, prog)
-            try:
-                st = os.stat(filename)
-            except os.error:
+            basename = os.path.join(dir, prog)
+
+            for e in ext:
+                try:
+                    filename = basename + e
+                    st = os.stat(filename)
+                    break
+                except os.error:
+                    filename = ""
+                    continue
+
+            if not filename:
                 continue
+
             if not S_ISREG(st[ST_MODE]):
                 msg(filename + ': not a disk file')
             else:
@@ -47,9 +57,7 @@ def main():
                         msg(s + filename)
                 else:
                     msg(filename + ': not executable')
-            if longlist:
-                sts = os.system('ls ' + longlist + ' ' + filename)
-                if sts: msg('"ls -l" exit status: ' + repr(sts))
+
         if not ident:
             msg(prog + ': not found')
             sts = 1

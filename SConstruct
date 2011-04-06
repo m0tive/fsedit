@@ -1,6 +1,6 @@
 # scons script for fsm
 
-import os
+import os, sys
 
 AddOption("--test",
           action="store_true", dest="run_tests", default=True,
@@ -42,7 +42,8 @@ vars = Variables('build-setup.conf');
 vars.AddVariables(
     BoolVariable('CONFIG_FROM_FILE', '', False),
     ('CONFIG_PLATFORM', '', ''),
-    ('WHICH_PATH', '', 'python %s' % os.path.normpath("tools/which.py")),
+    ('GIT_CHECKOUT', '', ''),
+    ('WHICH_PATH', '', '%s %s' % (sys.executable, os.path.normpath("tools/which.py"))),
 #    BoolVariable('USE_MSC_STDINT', '', False),
 #    ('FSM_ISNAN', '', ''),
     BoolVariable('HAS_DOXYGEN', '', False),
@@ -72,12 +73,14 @@ else:
 
 if reconfig :
     print 'Configuring...'
+
+    isGitCheckout = os.path.exists('.git')
+
     def CheckProgram(context, name):
-        context.Message( 'Checking for %s...' % name )
-        # TODO append the OS executable path (ie. add ".(exe|bat)" for windows)
-        ret = context.TryAction( '%s %s' % (env['WHICH_PATH'], name) )[0]
+        context.Message( 'Checking for %s... ' % name )
+        ret = context.TryAction( env['WHICH_PATH'] + " " + name )[0]
         context.Result( ret )
-        return ret;
+        return ret
 
     conf_tests = { 'CheckProgram' : CheckProgram }
     conf = Configure(env, custom_tests = conf_tests)
@@ -100,29 +103,17 @@ if reconfig :
 #    else:
 #        env['USE_MSC_STDINT'] = False
 
-    if not conf.CheckHeader('stddef.h', language="C++"):
-        print "\t!! You need 'stddef.h' to compile this library"
-        Exit(1)
+    def doAssertHeader( header ):
+        if not conf.CheckHeader( header, language="C++"):
+            print("\t!! You need '%s' to compile this library" % header)
+            Exit(1)
 
-    if not conf.CheckHeader('math.h', language="C++"):
-        print "\t!! You need 'math.h' to compile this library"
-        Exit(1)
-
-    if not conf.CheckHeader('float.h', language="C++"):
-        print "\t!! You need 'float.h' to compile this library"
-        Exit(1)
-
-    if not conf.CheckHeader('string.h', language="C++"):
-        print "\t!! You need 'string.h' to compile this library"
-        Exit(1)
-
-    if not conf.CheckHeader('limits', language="C++"):
-        print "\t!! You need 'limits' to compile this library"
-        Exit(1)
-
-    if not conf.CheckHeader('assert.h', language="C++"):
-        print "\t!! You need 'assert.h' to compile this library"
-        Exit(1)
+    doAssertHeader('stddef.h')
+    doAssertHeader('math.h')
+    doAssertHeader('float.h')
+    doAssertHeader('string.h')
+    doAssertHeader('limits')
+    doAssertHeader('assert.h')
 
 #    env['FSM_ISNAN'] = ''
 #    if not conf.CheckFunc('isnan', language="C++"):
@@ -131,7 +122,6 @@ if reconfig :
 #            Exit(1)
 #        else:
 #            env['FSM_ISNAN'] = '_isnan'
-
 
     if GetOption('run_doxygen'):
         if conf.CheckProgram( 'doxygen' ):
@@ -151,6 +141,7 @@ if reconfig :
 
     env = conf.Finish()
 
+    env['GIT_CHECKOUT'] = isGitCheckout
     env['CONFIG_FROM_FILE'] = True
     env['CONFIG_PLATFORM'] = env['PLATFORM']
     vars.Save('build-setup.conf', env)
