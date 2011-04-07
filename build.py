@@ -16,14 +16,30 @@ def which(exe):
         sts = 1
     return [ sts, output ]
 
-#isGitCheckout = os.path.exists('.git')
+def runScons():
+    sconsPath = "scons-local/scons.py"
+    if not os.path.exists( sconsPath ):
+        msg( "scons-local is missing" )
+        return 1
 
-if which( "scons" )[0] != 0:
-    msg( "no scons" )
+    try:
+        retcode = subprocess.call( [sys.executable, sconsPath] )
+        if retcode < 0:
+            return -retcode
+        else:
+            return retcode
+    except OSError, e:
+        msg( "Execution failed: " + e )
+    return 1
 
-sconsPath = "scons-local/scons.py"
-if not os.path.exists( sconsPath ):
-    msg( "scons-local is missing" )
-    exit(1)
+#------------------------------------------------------------------------------
 
-os.system( sys.executable + " " + sconsPath )
+def main():
+    if which( "scons" )[0] != 0:
+        msg( "no scons" )
+
+    ret = runScons()
+    sys.exit(ret)
+
+if __name__ == "__main__":
+    main()
