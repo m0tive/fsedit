@@ -142,6 +142,14 @@ if reconfig :
         context.Result( ret )
         return ret
 
+    def CheckOpenGl(context):
+        context.Message( 'Checking for openGL... ' )
+        context.env.Append( LIBS = ['gl', 'glu'] )
+        ret = context.TryLink( """#include <gl/gl.h>\n#include <gl/glu.h>\n""" + \
+                """int main(int c,char** v){glLoadIdentity();gluOrtho2D(.1,.2,.3,.4);return 1;}""", '.cpp' )
+        context.Result( ret )
+        return ret
+
     def configWarning( msg ):
         color_print(1, '\t!! ' + msg)
 
@@ -153,6 +161,7 @@ if reconfig :
         'CheckPkgConfig' : CheckPkgConfig,
         'CheckPkg' : CheckPkg,
         'CheckGtk' : CheckGtk,
+        'CheckOpenGl' : CheckOpenGl
         }
 
     conf = Configure(env, custom_tests = conf_tests)
@@ -204,6 +213,10 @@ if reconfig :
 
     if not conf.CheckPkg('gtk+-2.0'):
         configWarning('You need gtk+ to build this library')
+        Exit(1)
+
+    if not conf.CheckOpenGl():
+        configWarning('You need OpenGl to build this library')
         Exit(1)
 
     if GetOption('run_doxygen'):
