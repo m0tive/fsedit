@@ -17,13 +17,24 @@ def which(exe):
     return [ sts, output ]
 
 def runScons():
-    sconsPath = "scons-local/scons.py"
-    if not os.path.exists( sconsPath ):
-        msg( "scons-local is missing" )
-        return 1
+    sconsExecutable = "scons"
+
+    if which( "scons" )[0] != 0:
+        print "no scons, attempting to use scons-local"
+        if which( "git" )[0] != 0:
+            print "no git!"
+
+        sconsPath = "scons-local/scons.py"
+        if not os.path.exists( sconsPath ):
+            msg( "scons-local is missing" )
+            return 1
+
+        sconsExecutable = [sys.executable, sconsPath]
+
+    # TODO check scons version.
 
     try:
-        retcode = subprocess.call( [sys.executable, sconsPath] )
+        retcode = subprocess.call( sconsExecutable )
         if retcode < 0:
             return -retcode
         else:
@@ -35,9 +46,6 @@ def runScons():
 #------------------------------------------------------------------------------
 
 def main():
-    if which( "scons" )[0] != 0:
-        msg( "no scons" )
-
     ret = runScons()
     sys.exit(ret)
 

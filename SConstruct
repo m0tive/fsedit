@@ -1,6 +1,7 @@
 # scons script for fsm
 
 import os, sys
+from ctypes import *
 
 AddOption("--test",
           action="store_true", dest="run_tests", default=True,
@@ -36,6 +37,39 @@ AddOption("--configure",
 
 #-------------------------------------------------------------------------------
 
+def color_print(color, text, newline=True):
+    # 1 - red
+    # 2 - green
+    # 3 - yellow
+    # 4 - blue
+    text = "\033[9%sm%s\033[0m" % (color,text)
+    if not newline:
+        print text,
+    else:
+        print text
+
+def win_color_print(color, text, newline=True):
+    col = [ 15, 12, 10, 14, 9 ]
+    windll.Kernel32.GetStdHandle.restype = c_ulong
+    h = windll.Kernel32.GetStdHandle(c_ulong(0xfffffff5))
+    windll.Kernel32.SetConsoleTextAttribute(h, col[color])
+    if not newline:
+        print text,
+    else:
+        print text
+    windll.Kernel32.SetConsoleTextAttribute(h, 15)
+
+def regular_print(color, text, newline=True):
+    if not newline:
+        print text,
+    else:
+        print text
+
+if os.name == 'nt':
+  color_print = win_color_print
+
+#-------------------------------------------------------------------------------
+
 env = Environment(ENV = os.environ)
 
 vars = Variables('build-setup.conf');
@@ -44,6 +78,8 @@ vars.AddVariables(
     ('CONFIG_PLATFORM', '', ''),
     ('GIT_CHECKOUT', '', ''),
     ('WHICH_PATH', '', '%s %s' % (sys.executable, os.path.normpath("tools/which.py"))),
+    ('PKG_CONFIG_PATH', '', 'pkg-config'),
+    ('GTKCONFIG', '', ''),
 #    BoolVariable('USE_MSC_STDINT', '', False),
 #    ('FSM_ISNAN', '', ''),
     BoolVariable('HAS_DOXYGEN', '', False),
@@ -72,25 +108,61 @@ else:
 
 
 if reconfig :
-    print 'Configuring...'
+    color_print(2, 'Configuring...')
 
     isGitCheckout = os.path.exists('.git')
 
-    def CheckProgram(context, name):
+    def CheckExecutable(context, name):
         context.Message( 'Checking for %s... ' % name )
         ret = context.TryAction( env['WHICH_PATH'] + " " + name )[0]
         context.Result( ret )
         return ret
 
-    conf_tests = { 'CheckProgram' : CheckProgram }
+    def CheckPkgConfig(context, version):
+        context.Message( 'Checking for pkg-config... ' )
+        ret = context.TryAction(
+            '%s --atleast-pkgconfig-version=%s' % (context.env["PKG_CONFIG_PATH"], version))[0]
+        context.Result( ret )
+        return ret
+
+    def CheckPkg(context, name):
+        context.Message( 'Checking for %s... ' % name )
+        ret = context.TryAction(
+            '%s --exists \'%s\'' % (context.env["PKG_CONFIG_PATH"], name))[0]
+        context.Result( ret )
+        return ret
+
+    def CheckGtk(context):
+        context.Message( 'Checking for gtk+... ' )
+#        lastLIBS = context.env['LIBS']
+#        context.env.Append( LIBS = ['gtk', 'gdk'] )
+#        ret = context.TryLink( "#include <gtk/gtk.h>\nint main(int c,char **v){gtk_init(&c, &v);return 0;}" )
+#        context.env.Replace( LIBS = lastLIBS )
+        ret = False
+        context.Result( ret )
+        return ret
+
+    def configWarning( msg ):
+        color_print(1, '\t!! ' + msg)
+
+    def configLog( msg ):
+        color_print(3, '\t.. ' + msg)
+
+    conf_tests = {
+        'CheckExecutable' : CheckExecutable,
+        'CheckPkgConfig' : CheckPkgConfig,
+        'CheckPkg' : CheckPkg,
+        'CheckGtk' : CheckGtk,
+        }
+
     conf = Configure(env, custom_tests = conf_tests)
 
     if not conf.CheckCXX() :
-        print('\t!! Your compiler and/or environment is not correctly configured.')
+        configWarning('Your compiler and/or environment is not correctly configured.')
         Exit(1)
 
     if not conf.CheckFunc('printf', language="C++") :
-        print('\t!! Your compiler and/or environment is not correctly configured.')
+        configWarning('Your compiler and/or environment is not correctly configured.')
         Exit(1)
 
 #    if not conf.CheckHeader('stdint.h', language="C++"):
@@ -105,7 +177,7 @@ if reconfig :
 
     def doAssertHeader( header ):
         if not conf.CheckHeader( header, language="C++"):
-            print("\t!! You need '%s' to compile this library" % header)
+            configWarning("You need '%s' to compile this library" % header)
             Exit(1)
 
     doAssertHeader('stddef.h')
@@ -115,28 +187,39 @@ if reconfig :
     doAssertHeader('limits')
     doAssertHeader('assert.h')
 
+    if not conf.CheckPkgConfig('0.15.0'):
+        configWarning('You need pkg-config (version 0.15 or greater) to compile this library')
+        configLog('Check it is in your PATH, or set PKG_CONFIG_PATH')
+        if os.name == 'nt':
+            configLog('A Win32 installer can be found at:\n\t.. http://www.gtk.org/download-windows.html')
+        Exit(1)
+
 #    env['FSM_ISNAN'] = ''
 #    if not conf.CheckFunc('isnan', language="C++"):
 #        if not conf.CheckFunc('_isnan', language="C++"):
-#            print "\t!! You nee the function 'isnan' or '_isnan' to compile this library"
+#            print "\t!! You need the function 'isnan' or '_isnan' to compile this library"
 #            Exit(1)
 #        else:
 #            env['FSM_ISNAN'] = '_isnan'
 
+    if not conf.CheckPkg('gtk+-2.0'):
+        configWarning('You need gtk+ to build this library')
+        Exit(1)
+
     if GetOption('run_doxygen'):
-        if conf.CheckProgram( 'doxygen' ):
+        if conf.CheckExecutable( 'doxygen' ):
             env['HAS_DOXYGEN'] = True
         else:
-            print "\tCannot find doxygen on your system, make sure it is in your PATH"
-            print "\tSkipping doxygen..."
+            configLog("Cannot find doxygen on your system, make sure it is in your PATH")
+            configLog("Skipping doxygen...")
             env['HAS_DOXYGEN'] = False
 
     if GetOption('run_ctags'):
-        if conf.CheckProgram( 'ctags' ):
+        if conf.CheckExecutable( 'ctags' ):
             env['HAS_CTAGS'] = True
         else:
-            print "\tCannot find ctags on your system, make sure it is in your PATH"
-            print "\tSkipping tags..."
+            configLog("Cannot find ctags on your system, make sure it is in your PATH")
+            configLog("Skipping tags...")
             env['HAS_CTAGS'] = False
 
     env = conf.Finish()
